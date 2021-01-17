@@ -7,7 +7,7 @@ use rusqlite::Connection;
 
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clap)]
 #[clap(version = "1.0")]
@@ -19,11 +19,24 @@ struct Opts {
 fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
 
-    let path = Path::new(&opts.input);
-    let path = path.join("iTunes_Control/iTunes/MediaLibrary.sqlitedb");
+    let root = Path::new(&opts.input);
+    let dist = Path::new(&opts.output);
+    let path = root.join("iTunes_Control/iTunes/MediaLibrary.sqlitedb");
     let conn = Connection::open(path)?;
     let entries = medialibrary::read_entries(&conn)?;
     for entry in &entries {
+        // Build src/dst
+        let src = build_src(&entry, &root);
+        let dst = build_dst(&entry, &dist);
+
+        // Copy and update tags
+        if !&src.exists() {
+            println!("{:?} does not exist", &src);
+            continue;
+        }
+        fs::create_dir_all(&dst.parent().unwrap())?;
+        fs::copy(&src, &dst)?;
+
         // Build metadata from entry
         let meta = metadata::Metadata::new(
             Some(entry.title.to_owned()),
@@ -53,38 +66,39 @@ fn main() -> Result<()> {
             Some(entry.track_number),
             Some(entry.track_count),
         );
-
-        // Build src/dst
-        let src = Path::new(&opts.input)
-            .join(&entry.path)
-            .join(&entry.location);
-        let dst = Path::new(&opts.output)
-            .join(
-                // XXX: Is there any way to write the code below more simple?
-                &entry.album_artist.as_ref().unwrap_or(
-                    entry
-                        .item_artist
-                        .as_ref()
-                        .unwrap_or(&"Unknown artist".to_string()),
-                ),
-            )
-            .join(&entry.album.as_ref().unwrap_or(&"Unknown album".to_string()))
-            .join(format!(
-                "{}.{}",
-                &entry.title,
-                &src.extension().and_then(OsStr::to_str).unwrap_or("")
-            ));
-
-        // Copy and update tags
-        if !&src.exists() {
-            println!("{:?} does not exist", &src);
-            continue;
-        }
-        fs::create_dir_all(&dst.parent().unwrap())?;
-        fs::copy(&src, &dst)?;
         metadata::write_metadata(&dst, &meta)?;
         println!("{:?} -> {:?}", &src, &dst);
     }
 
     Ok(())
+}
+
+fn build_src(entry: &medialibrary::Entry, root: &Path) -> PathBuf {
+    root.join(&entry.path).join(&entry.location)
+}
+
+fn build_dst(entry: &medialibrary::Entry, root: &Path) -> PathBuf {
+    // XXX: Is there any way to write the code below more simple?
+    let art = entry
+        .item_artist
+        .as_ref()
+        .map(String::to_owned)
+        .unwrap_or("Unknown artist".to_string());
+    let art = entry
+        .album_artist
+        .as_ref()
+        .map(String::to_owned)
+        .unwrap_or(art);
+    let alb = entry
+        .album
+        .as_ref()
+        .map(String::to_owned)
+        .unwrap_or("Unknown album".to_string());
+    let ext = Path::new(&entry.location)
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or("");
+    root.join(art)
+        .join(alb)
+        .join(format!("{}.{}", &entry.title, ext))
 }

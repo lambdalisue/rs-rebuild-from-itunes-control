@@ -40,27 +40,10 @@ fn main() -> Result<()> {
         // Build metadata from entry
         let meta = metadata::Metadata::new(
             Some(entry.title.to_owned()),
-            // XXX: Is there any way to write the code below more simple?
-            entry
-                .item_artist
-                .as_ref()
-                .map(String::to_owned)
-                .or(Some("Unknown artist".into())),
-            entry
-                .album
-                .as_ref()
-                .map(String::to_owned)
-                .or(Some("Unknown album".into())),
-            entry
-                .album_artist
-                .as_ref()
-                .map(String::to_owned)
-                .or(Some("Unknown artist".into())),
-            entry
-                .genre
-                .as_ref()
-                .map(String::to_owned)
-                .or(Some("".into())),
+            entry.item_artist.as_deref().or(Some("Unknown artist")),
+            entry.album.as_deref().or(Some("Unknown album")),
+            entry.album_artist.as_deref().or(Some("Unknown artist")),
+            entry.genre.as_deref().or(Some("")),
             Some(entry.disc_number),
             Some(entry.disc_count),
             Some(entry.track_number),
@@ -78,22 +61,9 @@ fn build_src(entry: &medialibrary::Entry, root: &Path) -> PathBuf {
 }
 
 fn build_dst(entry: &medialibrary::Entry, root: &Path) -> PathBuf {
-    // XXX: Is there any way to write the code below more simple?
-    let art = entry
-        .item_artist
-        .as_ref()
-        .map(String::to_owned)
-        .unwrap_or("Unknown artist".to_string());
-    let art = entry
-        .album_artist
-        .as_ref()
-        .map(String::to_owned)
-        .unwrap_or(art);
-    let alb = entry
-        .album
-        .as_ref()
-        .map(String::to_owned)
-        .unwrap_or("Unknown album".to_string());
+    let art = entry.item_artist.as_deref().unwrap_or("Unknown artist");
+    let art = entry.album_artist.as_deref().unwrap_or(art);
+    let alb = entry.album.as_deref().unwrap_or("Unknown album");
     let ext = Path::new(&entry.location)
         .extension()
         .and_then(OsStr::to_str)
